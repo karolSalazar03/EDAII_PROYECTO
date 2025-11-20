@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushBut
 from PyQt5.QtGui import QFont, QPixmap # pyright: ignore[reportMissingImports]
 from PyQt5.QtCore import Qt
 
-from interfaz import TransporteApp, TransporteAppBFS
+from interfaz import EvacuacionApp, EvacuacionAppBFS
 
 class MenuPrincipal(QWidget):
     def __init__(self):
@@ -58,13 +58,13 @@ class MenuPrincipal(QWidget):
 
     def abrir_dfs(self):
         self.hide()
-        self.ventana_dfs = TransporteApp()
+        self.ventana_dfs = EvacuacionApp()
         self.ventana_dfs.showMaximized()
         self.ventana_dfs.show()
 
     def abrir_bfs(self):
         self.hide()
-        self.ventana_bfs = TransporteAppBFS()
+        self.ventana_bfs = EvacuacionAppBFS()
         self.ventana_bfs.showMaximized()
         self.ventana_bfs.show()
 

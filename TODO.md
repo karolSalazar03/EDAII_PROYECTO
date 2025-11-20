@@ -1,0 +1,8 @@
+- [x] Rename TransporteApp to EvacuacionApp in interfaz.py
+- [x] Rename TransporteAppBFS to EvacuacionAppBFS in interfaz.py
+- [x] Update references in main.py: TransporteApp to EvacuacionApp, TransporteAppBFS to EvacuacionAppBFS
+- [x] Update variable names in interfaz.py: dfs_app to evacuacion_dfs_app, bfs_app to evacuacion_bfs_app
+- [x] Update method calls in interfaz.py accordingly
+- [ ] Test the application to ensure renaming works
+- [ ] Change "estación" to "edificio" in interfaz.py: rename pedir_estacion to pedir_edificio, update prompts in buscar_ruta and eliminar_arista for both EvacuacionApp and EvacuacionAppBFS
+- [ ] Test the application after changes

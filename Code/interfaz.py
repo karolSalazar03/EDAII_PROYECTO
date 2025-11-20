@@ -7,16 +7,21 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
 import matplotlib.pyplot as plt
-import networkx as nx
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.image as mpimg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import math
 
 from grafo import Grafo
-from dfs import dfs_ruta_mas_profunda
-from bfs import bfs_ruta_mas_corta
+from dfs import dfs
+from bfs import bfs
 
 class MainMenu(QWidget):
+    """
+    Clase que representa el menú principal de la aplicación.
+
+    Permite al usuario seleccionar entre los algoritmos DFS y BFS para el sistema de evacuación en campus.
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Selección de Algoritmo")
@@ -66,61 +71,79 @@ class MainMenu(QWidget):
         self.showMaximized()
 
     def launch_dfs(self):
+        """
+        Lanza la aplicación de evacuación usando DFS.
+        """
         self.close()
-        self.dfs_app = TransporteApp()
-        self.dfs_app.show()
+        self.evacuacion_dfs_app = EvacuacionApp()
+        self.evacuacion_dfs_app.show()
 
     def launch_bfs(self):
+        """
+        Lanza la aplicación de evacuación usando BFS.
+        """
         self.close()
-        self.bfs_app = TransporteAppBFS()
-        self.bfs_app.show()
+        self.evacuacion_bfs_app = EvacuacionAppBFS()
+        self.evacuacion_bfs_app.show()
 
 class GrafoCanvas(FigureCanvas):
+    """
+    Clase para visualizar el grafo usando matplotlib.
+
+    Dibuja nodos como imágenes de edificios y aristas como líneas, destacando rutas en amarillo.
+    """
     def __init__(self, grafo):
+        """
+        Inicializa el canvas con una figura de matplotlib.
+
+        Args:
+            grafo (Grafo): El grafo a visualizar.
+        """
         self.fig, self.ax = plt.subplots(figsize=(7, 6), dpi=120)
         super().__init__(self.fig)
         self.set_grafo(grafo)
 
     def set_grafo(self, grafo, ruta=None):
-        self.ax.clear()
-        G = nx.Graph()
-        for nombre, nodo in grafo.nodos.items():
-            G.add_node(nombre)
-            for adyacente in nodo.adyacentes:
-                G.add_edge(nombre, adyacente.nombre)
-        pos = nx.spring_layout(G, seed=42)
+        """
+        Dibuja el grafo en el canvas.
 
-        # Crear set de aristas de la ruta si existe
+        Args:
+            grafo (Grafo): El grafo a dibujar.
+            ruta (list, optional): Lista de nodos que forman la ruta a destacar.
+        """
+        self.ax.clear()
+        nodes = list(grafo.nodos.keys())
+        edges = []
+        for nombre, nodo in grafo.nodos.items():
+            for ady in nodo.adyacentes:
+                if nombre < ady.nombre:  # Evitar duplicados
+                    edges.append((nombre, ady.nombre))
+
+        # Asignar posiciones en círculo
+        n = len(nodes)
+        pos = {}
+        for i, node in enumerate(nodes):
+            angle = 2 * math.pi * i / n if n > 0 else 0
+            pos[node] = (math.cos(angle), math.sin(angle))
+
+        # Dibujar todas las aristas en gris
+        for edge in edges:
+            x1, y1 = pos[edge[0]]
+            x2, y2 = pos[edge[1]]
+            self.ax.plot([x1, x2], [y1, y2], color="#B0BEC5", linewidth=1.5)
+
+        # Dibujar aristas de la ruta en amarillo
         ruta_edges = set()
         if ruta:
             for i in range(len(ruta) - 1):
                 ruta_edges.add((ruta[i], ruta[i+1]))
                 ruta_edges.add((ruta[i+1], ruta[i]))  # Para grafo no dirigido
 
-        # Dibuja todas las aristas en gris
-        nx.draw(
-            G, pos,
-            with_labels=False,
-            node_color='none',  # No dibujar círculos
-            node_size=10,
-            edge_color="#B0BEC5",
-            linewidths=1.5,
-            ax=self.ax
-        )
-
-        # Dibuja las aristas de la ruta en amarillo si existe
-        if ruta_edges:
-            ruta_G = nx.Graph()
-            ruta_G.add_edges_from(ruta_edges)
-            nx.draw(
-                ruta_G, pos,
-                with_labels=False,
-                node_color='none',
-                node_size=10,
-                edge_color="#FFD600",  # Amarillo
-                linewidths=3,
-                ax=self.ax
-            )
+        for edge in ruta_edges:
+            if edge in edges or (edge[1], edge[0]) in edges:
+                x1, y1 = pos[edge[0]]
+                x2, y2 = pos[edge[1]]
+                self.ax.plot([x1, x2], [y1, y2], color="#FFD600", linewidth=3)
 
         # Cargar imagen de edificio
         try:
@@ -135,16 +158,9 @@ class GrafoCanvas(FigureCanvas):
                 self.ax.add_artist(ab)
 
         # Etiquetas encima de la imagen
-        label_pos = {k: (v[0], v[1]+0.09) for k, v in pos.items()}
-        nx.draw_networkx_labels(
-            G, label_pos,
-            labels={n: n for n in G.nodes()},
-            font_size=4,
-            font_color="#FFFFFF",
-            font_weight='light',
-            bbox=dict(boxstyle="round,pad=0.25", fc="#23272e", ec="#B0BEC5", lw=1, alpha=0.85),
-            ax=self.ax
-        )
+        for node, (x, y) in pos.items():
+            self.ax.text(x, y + 0.09, node, fontsize=4, color="#FFFFFF", fontweight='light', ha='center', va='bottom',
+                         bbox=dict(boxstyle="round,pad=0.25", fc="#23272e", ec="#B0BEC5", lw=1, alpha=0.85))
         self.ax.set_title(
             "Grafo de Edificios",
             fontsize=11,
@@ -159,7 +175,12 @@ class GrafoCanvas(FigureCanvas):
 
 # ...existing code...
 
-class TransporteApp(QWidget):
+class EvacuacionApp(QWidget):
+    """
+    Clase para la aplicación de evacuación usando DFS.
+
+    Proporciona una interfaz gráfica para gestionar el grafo de edificios y buscar rutas usando DFS.
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sistema de Evacuacion en Campus ")
@@ -204,6 +225,11 @@ class TransporteApp(QWidget):
         self.showMaximized()
 
     def init_ui(self):
+        """
+        Inicializa la interfaz de usuario para la aplicación de evacuación.
+
+        Configura el layout principal, paneles, botones, campos de entrada y canvas del grafo.
+        """
         main_layout = QVBoxLayout(self)
 
         # --- Panel superior: controles y resultados ---
@@ -234,8 +260,8 @@ class TransporteApp(QWidget):
         self.entry.setPlaceholderText("Edificio (origen,destino)")
         left_panel.addWidget(self.entry)
 
-        self.add_btn = QPushButton("Agregar")
-        self.add_btn.clicked.connect(self.agregar_parada)
+        self.add_btn = QPushButton("Agregar Edificio")
+        self.add_btn.clicked.connect(self.agregar_edificio)
         left_panel.addWidget(self.add_btn)
 
         self.csv_btn = QPushButton("Cargar CSV")
@@ -294,15 +320,14 @@ class TransporteApp(QWidget):
 
     # ...existing methods...
 
-    def borrar_todo(self):
-        self.grafo = Grafo()
-        self.grafo_canvas.set_grafo(self.grafo)
-        self.texto.clear()
-        self.resultado.clear()
-        self.entry.clear()
-
 # ...existing code...
-    def agregar_parada(self):
+    def agregar_edificio(self):
+        """
+        Agrega una nueva arista al grafo basada en la entrada del usuario.
+
+        Lee el texto de entrada, lo divide en origen y destino, y agrega la arista al grafo.
+        Actualiza el canvas del grafo y guarda automáticamente en CSV si existe.
+        """
         datos = self.entry.text().strip()
         if ',' not in datos:
             QMessageBox.critical(self, "Error", "Formato: origen,destino")
@@ -322,6 +347,12 @@ class TransporteApp(QWidget):
                             f.write(f"{nombre},{adyacente.nombre}\n")
 
     def cargar_csv(self):
+        """
+        Carga un archivo CSV y agrega las aristas al grafo.
+
+        Abre un diálogo para seleccionar un archivo CSV, lee cada línea como origen,destino,
+        agrega las aristas al grafo y actualiza el canvas.
+        """
         archivo, _ = QFileDialog.getOpenFileName(self, "Abrir CSV", "", "CSV Files (*.csv)")
         if archivo:
             with open(archivo, 'r',encoding='utf-8') as f:
@@ -342,31 +373,38 @@ class TransporteApp(QWidget):
                             f.write(f"{nombre},{adyacente.nombre}\n")
             QMessageBox.information(self, "Guardado", "Grafo guardado en CSV exitosamente.")
 
-    def pedir_estacion(self, titulo, mensaje):
+    def pedir_edificio(self, titulo, mensaje):
         texto, ok = QInputDialog.getText(self, titulo, mensaje)
         return texto.strip() if ok and texto else None
 
     def buscar_ruta(self):
-        inicio = self.pedir_estacion("Inicio", "Estación de inicio:")
-        fin = self.pedir_estacion("Fin", "Estación de destino:")
+        inicio = self.pedir_edificio("Inicio", "Edificio de inicio:")
+        fin = self.pedir_edificio("Fin", "Edificio de destino:")
         if inicio and fin:
-            ruta = dfs_ruta_mas_profunda(self.grafo, inicio, fin)
+            resultado_dfs = dfs(self.grafo, inicio, fin)
+            texto = f"Padres: {resultado_dfs['padres']}\n"
+            texto += f"Árbol DFS: {resultado_dfs['arbol_dfs']}\n"
+            ruta = resultado_dfs['ruta_encontrada']
             if ruta:
-                self.resultado.setText(f"Ruta más profunda: {' -> '.join(ruta)}")
-                self.grafo_canvas.set_grafo(self.grafo, ruta)
-                self.grafo_canvas.update()
-                self.grafo_canvas.repaint()
+                texto += f"Ruta encontrada: {' -> '.join(ruta)}\n"
+                texto += f"Distancia: {len(ruta) - 1}\n"
             else:
-                self.resultado.setText("Ruta más profunda: No se encontró ruta.")
+                texto += "Ruta encontrada: No encontrada\n"
+            texto += f"Camino más profundo: {' -> '.join(resultado_dfs['camino_mas_profundo'])}\n"
+            texto += f"Tiempo: {resultado_dfs['tiempo']:.6f} segundos"
+            self.resultado.setText(texto)
+            if ruta:
+                self.grafo_canvas.set_grafo(self.grafo, ruta)
+            else:
                 self.grafo_canvas.set_grafo(self.grafo)
-                self.grafo_canvas.update()
-                self.grafo_canvas.repaint()
+            self.grafo_canvas.update()
+            self.grafo_canvas.repaint()
 
     def eliminar_arista(self):
-        origen = self.pedir_estacion("Eliminar Arista", "Origen:")
+        origen = self.pedir_edificio("Eliminar Arista", "Edificio origen:")
         if not origen:
             return
-        destino = self.pedir_estacion("Eliminar Arista", "Destino:")
+        destino = self.pedir_edificio("Eliminar Arista", "Edificio destino:")
         if not destino:
             return
         reply = QMessageBox.question(self, "Confirmar", f"¿Eliminar arista de {origen} a {destino}?", QMessageBox.Yes | QMessageBox.No)
@@ -387,7 +425,12 @@ class TransporteApp(QWidget):
         self.menu = MainMenu()
         self.menu.show()
 
-class TransporteAppBFS(QWidget):
+class EvacuacionAppBFS(QWidget):
+    """
+    Clase para la aplicación de evacuación usando BFS.
+
+    Similar a EvacuacionApp pero utiliza BFS para encontrar la ruta más corta.
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sistema de Evacuacion en Campus ")
@@ -464,8 +507,8 @@ class TransporteAppBFS(QWidget):
         self.entry.setPlaceholderText("Edificio (origen,destino)")
         left_panel.addWidget(self.entry)
 
-        self.add_btn = QPushButton("Agregar")
-        self.add_btn.clicked.connect(self.agregar_parada)
+        self.add_btn = QPushButton("Agregar Edificio")
+        self.add_btn.clicked.connect(self.agregar_edificio)
         left_panel.addWidget(self.add_btn)
 
         self.csv_btn = QPushButton("Cargar CSV")
@@ -523,7 +566,7 @@ class TransporteAppBFS(QWidget):
         main_layout.addWidget(self.resultado, stretch=0)
 
 # ...existing code...
-    def agregar_parada(self):
+    def agregar_edificio(self):
         datos = self.entry.text().strip()
         if ',' not in datos:
             QMessageBox.critical(self, "Error", "Formato: origen,destino")
@@ -533,6 +576,14 @@ class TransporteAppBFS(QWidget):
         self.texto.append(f"Agregado: {origen.strip()} -> {destino.strip()}")
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
+        # Guardar automáticamente en CSV solo si el archivo existe
+        csv_path = os.path.join(os.path.dirname(__file__), '..', 'Archivos', 'CampusEpn.csv')
+        if os.path.exists(csv_path):
+            with open(csv_path, 'w', encoding='utf-8') as f:
+                for nombre, nodo in self.grafo.nodos.items():
+                    for adyacente in nodo.adyacentes:
+                        if nombre < adyacente.nombre:
+                            f.write(f"{nombre},{adyacente.nombre}\n")
 
     def cargar_csv(self):
         archivo, _ = QFileDialog.getOpenFileName(self, "Abrir CSV", "", "CSV Files (*.csv)")
@@ -544,31 +595,37 @@ class TransporteAppBFS(QWidget):
                     self.texto.append(f"Conectado: {origen} -> {destino}")
             self.grafo_canvas.set_grafo(self.grafo)
 
-    def pedir_estacion(self, titulo, mensaje):
+    def pedir_edificio(self, titulo, mensaje):
         texto, ok = QInputDialog.getText(self, titulo, mensaje)
         return texto.strip() if ok and texto else None
 
     def buscar_ruta(self):
-        inicio = self.pedir_estacion("Inicio", "Estación de inicio:")
-        fin = self.pedir_estacion("Fin", "Estación de destino:")
+        inicio = self.pedir_edificio("Inicio", "Edificio de inicio:")
+        fin = self.pedir_edificio("Fin", "Edificio de destino:")
         if inicio and fin:
-            ruta = bfs_ruta_mas_corta(self.grafo, inicio, fin)
-            if ruta:
-                self.resultado.setText(f"Ruta más corta: {' -> '.join(ruta)}")
-                self.grafo_canvas.set_grafo(self.grafo, ruta)
-                self.grafo_canvas.update()
-                self.grafo_canvas.repaint()
+            resultado_bfs = bfs(self.grafo, inicio, fin)
+            if fin in resultado_bfs['distancias']:
+                texto = f"Distancia al destino: {resultado_bfs['distancias'][fin]}\n"
             else:
-                self.resultado.setText("Ruta más corta: No se encontró ruta.")
+                texto = "Distancia al destino: No encontrada\n"
+            texto += f"Padres: {resultado_bfs['padres']}\n"
+            texto += f"Ruta más corta: {' -> '.join(resultado_bfs['ruta_mas_corta']) if resultado_bfs['ruta_mas_corta'] else 'No encontrada'}\n"
+            texto += f"Árbol BFS: {resultado_bfs['arbol_bfs']}\n"
+            texto += f"Tiempo: {resultado_bfs['tiempo']:.6f} segundos"
+            self.resultado.setText(texto)
+            ruta = resultado_bfs['ruta_mas_corta']
+            if ruta:
+                self.grafo_canvas.set_grafo(self.grafo, ruta)
+            else:
                 self.grafo_canvas.set_grafo(self.grafo)
-                self.grafo_canvas.update()
-                self.grafo_canvas.repaint()
+            self.grafo_canvas.update()
+            self.grafo_canvas.repaint()
 
     def eliminar_arista(self):
-        origen = self.pedir_estacion("Eliminar Arista", "Origen:")
+        origen = self.pedir_edificio("Eliminar Arista", "Edificio origen:")
         if not origen:
             return
-        destino = self.pedir_estacion("Eliminar Arista", "Destino:")
+        destino = self.pedir_edificio("Eliminar Arista", "Edificio destino:")
         if not destino:
             return
         reply = QMessageBox.question(self, "Confirmar", f"¿Eliminar arista de {origen} a {destino}?", QMessageBox.Yes | QMessageBox.No)
