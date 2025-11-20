@@ -1,0 +1,20 @@
+.DS_Store  # macOS archivos del sistema
+Thumbs.db  # Windows archivos del sistema
+*.log      # Archivos de registro
+.env       # Variables de entorno (contraseñas, API keys)
+node_modules/  # Dependencias en proyectos Node.js
+dist/      # Archivos de compilación
+build/     # Archivos generados automáticamente
+.idea/     # Configuración de JetBrains IDEs (como WebStorm, PyCharm)
+.vscode/   # Configuración de VS Code
+__pycache__/  # Caché de Python
+
+*.pyc         # Archivos compilados de Python
+venv/         # Entorno virtual
+*.swp         # Archivos temporales de Vim
+*.swo         # Archivos temporales de Vim
+*.bak         # Archivos de respaldo
+*.tmp         # Archivos temporales
+*.orig        # Archivos originales dtee Git
+*.iml         # Archivos de configuración de IntelliJ IDEA
+
