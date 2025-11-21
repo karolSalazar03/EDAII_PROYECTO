@@ -10,19 +10,19 @@ class MenuPrincipal(QWidget):
         super().__init__()
         self.setWindowTitle("Menú de Evacuación en Campus")
         self.setStyleSheet("""
-            QWidget { background: #87CEEB; }
-            QLabel { color: #000000; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14pt; }
+            QWidget { background: #0b2545; }
+            QLabel { color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14pt; }
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4682B4, stop:1 #1e90ff);
+                background-color: #8B0000;
                 color: #ffffff;
-                border: 1px solid #1e90ff;
+                border: 1px solid #8B0000;
                 border-radius: 12px;
                 padding: 12px 24px;
                 font-size: 12pt;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e90ff, stop:1 #4169e1);
+                background-color: #6b0000;
             }
         """)
 

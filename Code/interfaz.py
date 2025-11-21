@@ -26,19 +26,19 @@ class MainMenu(QWidget):
         super().__init__()
         self.setWindowTitle("Selección de Algoritmo")
         self.setStyleSheet("""
-            QWidget { background: #87CEEB; }
-            QLabel { color: #000000; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14pt; }
+            QWidget { background: #0b2545; }
+            QLabel { color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; font-size: 14pt; }
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4682B4, stop:1 #1e90ff);
+                background-color: #8B0000;
                 color: #ffffff;
-                border: 1px solid #1e90ff;
+                border: none;
                 border-radius: 12px;
-                padding: 12px 24px;
+                padding: 10px 20px;
                 font-size: 12pt;
-                font-weight: bold;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e90ff, stop:1 #4169e1);
+                background-color: #6b0000;
             }
         """)
         self.init_ui()
@@ -47,7 +47,7 @@ class MainMenu(QWidget):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
 
-        # Imagen de Evacuacion
+        
         evacuacion_label = QLabel()
         pixmap = QPixmap("Media/Evacuacion.png")
         if not pixmap.isNull():
@@ -99,8 +99,14 @@ class GrafoCanvas(FigureCanvas):
         Args:
             grafo (Grafo): El grafo a visualizar.
         """
-        self.fig, self.ax = plt.subplots(figsize=(7, 6), dpi=120)
+        
+        self.fig, self.ax = plt.subplots(figsize=(8, 6), dpi=120)
         super().__init__(self.fig)
+        
+        try:
+            self.setMinimumSize(720, 540)
+        except Exception:
+            pass
         self.set_grafo(grafo)
 
     def set_grafo(self, grafo, ruta=None):
@@ -119,20 +125,22 @@ class GrafoCanvas(FigureCanvas):
                 if nombre < ady.nombre:  # Evitar duplicados
                     edges.append((nombre, ady.nombre))
 
-        # Asignar posiciones en círculo
+        
         n = len(nodes)
         pos = {}
+        
+        radius = 1.2 + min(3.0, max(0.0, (n - 6) * 0.08)) if n > 0 else 1.0
         for i, node in enumerate(nodes):
             angle = 2 * math.pi * i / n if n > 0 else 0
-            pos[node] = (math.cos(angle), math.sin(angle))
+            pos[node] = (math.cos(angle) * radius, math.sin(angle) * radius)
 
-        # Dibujar todas las aristas en gris
+        
         for edge in edges:
             x1, y1 = pos[edge[0]]
             x2, y2 = pos[edge[1]]
-            self.ax.plot([x1, x2], [y1, y2], color="#B0BEC5", linewidth=1.5)
+            self.ax.plot([x1, x2], [y1, y2], color="#9EA7AA", linewidth=2)
 
-        # Dibujar aristas de la ruta en amarillo
+        
         ruta_edges = set()
         if ruta:
             for i in range(len(ruta) - 1):
@@ -143,24 +151,42 @@ class GrafoCanvas(FigureCanvas):
             if edge in edges or (edge[1], edge[0]) in edges:
                 x1, y1 = pos[edge[0]]
                 x2, y2 = pos[edge[1]]
-                self.ax.plot([x1, x2], [y1, y2], color="#FFD600", linewidth=3)
+                self.ax.plot([x1, x2], [y1, y2], color="#FFD600", linewidth=4, zorder=1)
 
-        # Cargar imagen de edificio
+        
         try:
             img = mpimg.imread("Media/Edificio.png")
         except Exception:
             img = None
-        # Coloca la imagen en cada nodo
-        if img is not None:
-            for p in pos.values():
-                imagebox = OffsetImage(img, zoom=0.02)  # Ajusta el zoom según tamaño deseado
-                ab = AnnotationBbox(imagebox, p, frameon=False)
-                self.ax.add_artist(ab)
 
-        # Etiquetas encima de la imagen
+        
+        if img is not None:
+            if n <= 8:
+                img_zoom = 0.08
+            elif n <= 20:
+                img_zoom = 0.06
+            else:
+                img_zoom = 0.035
+        else:
+            img_zoom = None
+
+        
         for node, (x, y) in pos.items():
-            self.ax.text(x, y + 0.09, node, fontsize=4, color="#FFFFFF", fontweight='light', ha='center', va='bottom',
-                         bbox=dict(boxstyle="round,pad=0.25", fc="#23272e", ec="#B0BEC5", lw=1, alpha=0.85))
+            
+            self.ax.scatter([x], [y], s=240 if n <= 8 else 120, color="#0b2545", edgecolors="#8B0000", linewidths=1.2, zorder=2)
+            if img is not None:
+                try:
+                    imagebox = OffsetImage(img, zoom=img_zoom)
+                    ab = AnnotationBbox(imagebox, (x, y), frameon=False, zorder=3)
+                    self.ax.add_artist(ab)
+                except Exception:
+                    pass
+
+        
+        for node, (x, y) in pos.items():
+            self.ax.text(x, y + (0.12 if n <= 8 else 0.09), node, fontsize=11 if n <= 12 else 9, color="#FFFFFF",
+                         fontweight='600', ha='center', va='bottom',
+                         bbox=dict(boxstyle="round,pad=0.25", fc="#0b2545", ec="#8B0000", lw=0.8, alpha=0.98), zorder=4)
         self.ax.set_title(
             "Grafo de Edificios",
             fontsize=11,
@@ -173,7 +199,6 @@ class GrafoCanvas(FigureCanvas):
         self.ax.axis('off')
         self.draw()
 
-# ...existing code...
 
 class EvacuacionApp(QWidget):
     """
@@ -185,36 +210,37 @@ class EvacuacionApp(QWidget):
         super().__init__()
         self.setWindowTitle("Sistema de Evacuacion en Campus ")
         self.setStyleSheet("""
-            QWidget { background: #87CEEB; }
+            QWidget { background: #0b2545; }
             QLabel, QLineEdit, QTextEdit {
-                color: #000000;
+                color: #ffffff;
                 font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
                 font-size: 11pt;
                 font-weight: 400;
             }
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4682B4, stop:1 #1e90ff);
+                background-color: #8B0000;
                 color: #ffffff;
-                border: 1px solid #1e90ff;
-                border-radius: 7px;
-                padding: 7px 18px;
+                border: none;
+                border-radius: 10px;
+                padding: 9px 16px;
                 font-size: 11pt;
-                font-weight: 500;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e90ff, stop:1 #4169e1);
+                background-color: #6b0000;
             }
             QLineEdit, QTextEdit {
                 background: #ffffff;
-                border: 1px solid #44475a;
-                border-radius: 6px;
+                color: #000000;
+                border: 1px solid #0b2545;
+                border-radius: 8px;
                 font-size: 11pt;
             }
             QTextEdit#CargadosTextEdit {
                 font-size: 12pt; /* Más grande para mejor visibilidad */
                 background: #ffffff;
                 color: #000000;
-                border: 2px solid #44475a;
+                border: 2px solid #0b2545;
                 border-radius: 8px;
                 margin-bottom: 12px;
             }
@@ -232,17 +258,17 @@ class EvacuacionApp(QWidget):
         """
         main_layout = QVBoxLayout(self)
 
-        # --- Panel superior: controles y resultados ---
+        
         top_panel = QHBoxLayout()
         left_panel = QVBoxLayout()
         left_panel.setSpacing(18)
 
-        # Botón de volver al menú principal
+        
         self.menu_btn = QPushButton("Volver al Menu Principal")
         self.menu_btn.clicked.connect(self.volver_menu)
         left_panel.addWidget(self.menu_btn)
 
-        # Logo EPN
+        
         logo_label = QLabel()
         pixmap = QPixmap("Media/EPNLOGO.png")
         if not pixmap.isNull():
@@ -255,7 +281,7 @@ class EvacuacionApp(QWidget):
         title.setAlignment(Qt.AlignCenter)
         left_panel.addWidget(title)
 
-        # Entrada de edificios
+        
         self.entry = QLineEdit()
         self.entry.setPlaceholderText("Edificio (origen,destino)")
         left_panel.addWidget(self.entry)
@@ -272,17 +298,9 @@ class EvacuacionApp(QWidget):
         self.buscar_btn.clicked.connect(self.buscar_ruta)
         left_panel.addWidget(self.buscar_btn)
 
-        # Botón de eliminar arista
-        self.eliminar_btn = QPushButton("Eliminar Arista")
-        self.eliminar_btn.clicked.connect(self.eliminar_arista)
-        left_panel.addWidget(self.eliminar_btn)
+        
 
-        # Botón de borrar todo
-        self.borrar_btn = QPushButton("Borrar Todo")
-        self.borrar_btn.clicked.connect(self.borrar_todo)
-        left_panel.addWidget(self.borrar_btn)
-
-        # Texto de resultados de agregados/cargados (más alto, bien encuadrado, con barra scroll)
+        
         self.texto = QTextEdit()
         self.texto.setObjectName("CargadosTextEdit")
         self.texto.setReadOnly(True)
@@ -291,7 +309,7 @@ class EvacuacionApp(QWidget):
         self.texto.setLineWrapMode(QTextEdit.WidgetWidth)
         left_panel.addWidget(self.texto)
 
-        # Línea separadora entre cuadros
+        
         dfs_line = QFrame()
         dfs_line.setFrameShape(QFrame.HLine)
         dfs_line.setFrameShadow(QFrame.Sunken)
@@ -300,27 +318,25 @@ class EvacuacionApp(QWidget):
 
         left_panel.addStretch(0)
 
-        # --- LADO DERECHO: Grafo ---
+        
         self.grafo_canvas = GrafoCanvas(self.grafo)
         self.grafo_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # --- Panel superior: controles (izq) y grafo (der) ---
+        
         top_panel.addLayout(left_panel, stretch=1)
         top_panel.addWidget(self.grafo_canvas, stretch=2)
 
-        # --- Panel inferior: resultado DFS a lo ancho ---
+        
         self.resultado = QTextEdit()
         self.resultado.setReadOnly(True)
-        self.resultado.setStyleSheet("background: #ffffff; color: #000000; font-size: 12pt; border: 2px solid #44475a; border-radius: 8px;")
+        self.resultado.setStyleSheet("background: #ffffff; color: #000000; font-size: 12pt; border: 2px solid #0b2545; border-radius: 8px;")
         self.resultado.setLineWrapMode(QTextEdit.WidgetWidth)
         self.resultado.setFixedHeight(70)
 
         main_layout.addLayout(top_panel, stretch=5)
         main_layout.addWidget(self.resultado, stretch=0)
 
-    # ...existing methods...
-
-# ...existing code...
+    
     def agregar_edificio(self):
         """
         Agrega una nueva arista al grafo basada en la entrada del usuario.
@@ -334,10 +350,11 @@ class EvacuacionApp(QWidget):
             return
         origen, destino = datos.split(',')
         self.grafo.agregar_arista(origen.strip(), destino.strip())
+        
         self.texto.append(f"Agregado: {origen.strip()} -> {destino.strip()}")
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
-        # Guardar automáticamente en CSV solo si el archivo existe
+        
         csv_path = os.path.join(os.path.dirname(__file__), '..', 'Archivos', 'CampusEpn.csv')
         if os.path.exists(csv_path):
             with open(csv_path, 'w', encoding='utf-8') as f:
@@ -359,6 +376,7 @@ class EvacuacionApp(QWidget):
                 for linea in f:
                     origen, destino = linea.strip().split(',')
                     self.grafo.agregar_arista(origen, destino)
+                    
                     self.texto.append(f"Conectado: {origen} -> {destino}")
             self.grafo_canvas.set_grafo(self.grafo)
 
@@ -368,7 +386,7 @@ class EvacuacionApp(QWidget):
             with open(archivo, 'w', encoding='utf-8') as f:
                 for nombre, nodo in self.grafo.nodos.items():
                     for adyacente in nodo.adyacentes:
-                        # Para evitar duplicados en grafo no dirigido, solo escribir si nombre < adyacente.nombre
+                        
                         if nombre < adyacente.nombre:
                             f.write(f"{nombre},{adyacente.nombre}\n")
             QMessageBox.information(self, "Guardado", "Grafo guardado en CSV exitosamente.")
@@ -399,31 +417,16 @@ class EvacuacionApp(QWidget):
                 self.grafo_canvas.set_grafo(self.grafo)
             self.grafo_canvas.update()
             self.grafo_canvas.repaint()
+            
 
-    def eliminar_arista(self):
-        origen = self.pedir_edificio("Eliminar Arista", "Edificio origen:")
-        if not origen:
-            return
-        destino = self.pedir_edificio("Eliminar Arista", "Edificio destino:")
-        if not destino:
-            return
-        reply = QMessageBox.question(self, "Confirmar", f"¿Eliminar arista de {origen} a {destino}?", QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.grafo.eliminar_arista(origen, destino)
-            self.texto.append(f"Eliminado: {origen} -> {destino}")
-            self.grafo_canvas.set_grafo(self.grafo)
-
-    def borrar_todo(self):
-        self.grafo = Grafo()
-        self.grafo_canvas.set_grafo(self.grafo)
-        self.texto.clear()
-        self.resultado.clear()
-        self.entry.clear()
+    
 
     def volver_menu(self):
         self.close()
         self.menu = MainMenu()
         self.menu.show()
+
+    
 
 class EvacuacionAppBFS(QWidget):
     """
@@ -435,36 +438,37 @@ class EvacuacionAppBFS(QWidget):
         super().__init__()
         self.setWindowTitle("Sistema de Evacuacion en Campus ")
         self.setStyleSheet("""
-            QWidget { background: #87CEEB; }
+            QWidget { background: #0b2545; }
             QLabel, QLineEdit, QTextEdit {
-                color: #000000;
+                color: #ffffff;
                 font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
                 font-size: 11pt;
                 font-weight: 400;
             }
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #4682B4, stop:1 #1e90ff);
+                background-color: #8B0000;
                 color: #ffffff;
-                border: 1px solid #1e90ff;
-                border-radius: 7px;
-                padding: 7px 18px;
+                border: none;
+                border-radius: 10px;
+                padding: 9px 16px;
                 font-size: 11pt;
-                font-weight: 500;
+                font-weight: 600;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1e90ff, stop:1 #4169e1);
+                background-color: #6b0000;
             }
             QLineEdit, QTextEdit {
                 background: #ffffff;
-                border: 1px solid #44475a;
-                border-radius: 6px;
+                color: #000000;
+                border: 1px solid #0b2545;
+                border-radius: 8px;
                 font-size: 11pt;
             }
             QTextEdit#CargadosTextEdit {
                 font-size: 12pt; /* Más grande para mejor visibilidad */
                 background: #ffffff;
                 color: #000000;
-                border: 2px solid #44475a;
+                border: 2px solid #0b2545;
                 border-radius: 8px;
                 margin-bottom: 12px;
             }
@@ -474,22 +478,20 @@ class EvacuacionAppBFS(QWidget):
         self.init_ui()
         self.showMaximized()
 
-    # ...existing code...
-
     def init_ui(self):
         main_layout = QVBoxLayout(self)
 
-        # --- Panel superior: controles y resultados ---
+        
         top_panel = QHBoxLayout()
         left_panel = QVBoxLayout()
         left_panel.setSpacing(18)
 
-        # Botón de volver al menú principal
+        
         self.menu_btn = QPushButton("Volver al Menu Principal")
         self.menu_btn.clicked.connect(self.volver_menu)
         left_panel.addWidget(self.menu_btn)
 
-        # Logo EPN
+        
         logo_label = QLabel()
         pixmap = QPixmap("Media/EPNLOGO.png")
         if not pixmap.isNull():
@@ -502,7 +504,7 @@ class EvacuacionAppBFS(QWidget):
         title.setAlignment(Qt.AlignCenter)
         left_panel.addWidget(title)
 
-        # Entrada de edificios
+        
         self.entry = QLineEdit()
         self.entry.setPlaceholderText("Edificio (origen,destino)")
         left_panel.addWidget(self.entry)
@@ -519,17 +521,8 @@ class EvacuacionAppBFS(QWidget):
         self.buscar_btn.clicked.connect(self.buscar_ruta)
         left_panel.addWidget(self.buscar_btn)
 
-        # Botón de eliminar arista
-        self.eliminar_btn = QPushButton("Eliminar Arista")
-        self.eliminar_btn.clicked.connect(self.eliminar_arista)
-        left_panel.addWidget(self.eliminar_btn)
-
-        # Botón de borrar todo
-        self.borrar_btn = QPushButton("Borrar Todo")
-        self.borrar_btn.clicked.connect(self.borrar_todo)
-        left_panel.addWidget(self.borrar_btn)
-
-        # Texto de resultados de agregados/cargados (más alto para mejor visibilidad)
+        
+        
         self.texto = QTextEdit()
         self.texto.setObjectName("CargadosTextEdit")
         self.texto.setReadOnly(True)
@@ -538,7 +531,7 @@ class EvacuacionAppBFS(QWidget):
         self.texto.setLineWrapMode(QTextEdit.WidgetWidth)
         left_panel.addWidget(self.texto)
 
-        # Línea separadora entre cuadros
+        
         dfs_line = QFrame()
         dfs_line.setFrameShape(QFrame.HLine)
         dfs_line.setFrameShadow(QFrame.Sunken)
@@ -547,25 +540,24 @@ class EvacuacionAppBFS(QWidget):
 
         left_panel.addStretch(0)
 
-        # --- LADO DERECHO: Grafo ---
+        
         self.grafo_canvas = GrafoCanvas(self.grafo)
         self.grafo_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # --- Panel superior: controles (izq) y grafo (der) ---
+        
         top_panel.addLayout(left_panel, stretch=1)
         top_panel.addWidget(self.grafo_canvas, stretch=2)
 
-        # --- Panel inferior: resultado DFS a lo ancho ---
+        
         self.resultado = QTextEdit()
         self.resultado.setReadOnly(True)
-        self.resultado.setStyleSheet("background: #ffffff; color: #000000; font-size: 12pt; border: 2px solid #44475a; border-radius: 8px;")
+        self.resultado.setStyleSheet("background: #000000; color: #ffffff; font-size: 12pt; border: 2px solid #4b0000; border-radius: 8px;")
         self.resultado.setLineWrapMode(QTextEdit.WidgetWidth)
         self.resultado.setFixedHeight(70)
 
         main_layout.addLayout(top_panel, stretch=5)
         main_layout.addWidget(self.resultado, stretch=0)
 
-# ...existing code...
     def agregar_edificio(self):
         datos = self.entry.text().strip()
         if ',' not in datos:
@@ -576,7 +568,7 @@ class EvacuacionAppBFS(QWidget):
         self.texto.append(f"Agregado: {origen.strip()} -> {destino.strip()}")
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
-        # Guardar automáticamente en CSV solo si el archivo existe
+        
         csv_path = os.path.join(os.path.dirname(__file__), '..', 'Archivos', 'CampusEpn.csv')
         if os.path.exists(csv_path):
             with open(csv_path, 'w', encoding='utf-8') as f:
@@ -588,12 +580,22 @@ class EvacuacionAppBFS(QWidget):
     def cargar_csv(self):
         archivo, _ = QFileDialog.getOpenFileName(self, "Abrir CSV", "", "CSV Files (*.csv)")
         if archivo:
-            with open(archivo, 'r',encoding='utf-8') as f:
+            with open(archivo, 'r', encoding='utf-8') as f:
                 for linea in f:
                     origen, destino = linea.strip().split(',')
                     self.grafo.agregar_arista(origen, destino)
                     self.texto.append(f"Conectado: {origen} -> {destino}")
             self.grafo_canvas.set_grafo(self.grafo)
+
+    def guardar_csv(self):
+        archivo, _ = QFileDialog.getSaveFileName(self, "Guardar CSV", "", "CSV Files (*.csv)")
+        if archivo:
+            with open(archivo, 'w', encoding='utf-8') as f:
+                for nombre, nodo in self.grafo.nodos.items():
+                    for adyacente in nodo.adyacentes:
+                        if nombre < adyacente.nombre:
+                            f.write(f"{nombre},{adyacente.nombre}\n")
+            QMessageBox.information(self, "Guardado", "Grafo guardado en CSV exitosamente.")
 
     def pedir_edificio(self, titulo, mensaje):
         texto, ok = QInputDialog.getText(self, titulo, mensaje)
@@ -621,30 +623,14 @@ class EvacuacionAppBFS(QWidget):
             self.grafo_canvas.update()
             self.grafo_canvas.repaint()
 
-    def eliminar_arista(self):
-        origen = self.pedir_edificio("Eliminar Arista", "Edificio origen:")
-        if not origen:
-            return
-        destino = self.pedir_edificio("Eliminar Arista", "Edificio destino:")
-        if not destino:
-            return
-        reply = QMessageBox.question(self, "Confirmar", f"¿Eliminar arista de {origen} a {destino}?", QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.grafo.eliminar_arista(origen, destino)
-            self.texto.append(f"Eliminado: {origen} -> {destino}")
-            self.grafo_canvas.set_grafo(self.grafo)
-
-    def borrar_todo(self):
-        self.grafo = Grafo()
-        self.grafo_canvas.set_grafo(self.grafo)
-        self.texto.clear()
-        self.resultado.clear()
-        self.entry.clear()
+            
 
     def volver_menu(self):
         self.close()
         self.menu = MainMenu()
         self.menu.show()
+
+    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
