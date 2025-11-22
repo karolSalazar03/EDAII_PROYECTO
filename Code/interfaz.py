@@ -6,15 +6,37 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFontMetrics
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.image as mpimg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.patches import Circle
 import math
 
 from grafo import Grafo
 from dfs import dfs
 from bfs import bfs
+
+
+def set_result_widget_text(widget, text, min_lines=1, max_lines=8, padding=12):
+    """Setea el texto de `widget` (QTextEdit) y ajusta su altura para mostrar todas las líneas.
+
+    - `min_lines` y `max_lines` limitan la altura mínima y máxima (en número de líneas).
+    - `padding` agrega espacio extra en píxeles.
+    """
+    widget.setPlainText(text)
+    fm = QFontMetrics(widget.font())
+    line_h = fm.lineSpacing()
+    lines = text.count('\n') + 1
+    lines = max(min_lines, min(lines, max_lines))
+    height = lines * line_h + padding
+    try:
+        widget.setFixedHeight(height)
+        widget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    except Exception:
+        pass
 
 
 class TreeCanvas(FigureCanvas):
@@ -32,7 +54,7 @@ class TreeCanvas(FigureCanvas):
             pass
         self.ax.axis('off')
 
-    def set_tree(self, padres_map):
+    def set_tree(self, padres_map, ruta=None):
         self.ax.clear()
         if not padres_map:
             self.draw()
@@ -86,18 +108,40 @@ class TreeCanvas(FigureCanvas):
         xs = {n: xpos[n] * 1.6 for n in xpos}
         ys = ypos
 
-        # dibujar aristas
+        # preparar ruta (si la hay) para resaltar
+        route_nodes = set(ruta) if ruta else set()
+        route_edges = set()
+        if ruta and len(ruta) >= 2:
+            for i in range(len(ruta) - 1):
+                route_edges.add((ruta[i], ruta[i+1]))
+                route_edges.add((ruta[i+1], ruta[i]))
+
+        # dibujar aristas (colorear en verde si pertenecen a la ruta)
         for parent, childs in children.items():
             for c in childs:
                 x1, y1 = xs.get(parent, 0), ys.get(parent, 0)
                 x2, y2 = xs.get(c, 0), ys.get(c, 0)
-                self.ax.plot([x1, x2], [y1, y2], color="#8B0000", linewidth=1.6, zorder=1)
+                if (parent, c) in route_edges:
+                    self.ax.plot([x1, x2], [y1, y2], color="#2ecc71", linewidth=3.0, zorder=1)
+                else:
+                    self.ax.plot([x1, x2], [y1, y2], color="#8B0000", linewidth=1.6, zorder=1)
 
-        # dibujar nodos
+        # dibujar nodos con tamaño adaptativo para que el texto quepa
         for node in xpos.keys():
             x, y = xs[node], ys[node]
-            self.ax.scatter([x], [y], s=260, color="#0b2545", edgecolors="#8B0000", linewidths=1.2, zorder=2)
-            self.ax.text(x, y, str(node), color="#ffffff", ha='center', va='center', fontsize=9, zorder=3)
+            label = str(node)
+            # aproximación del ancho requerido según longitud del texto
+            text_len = max(1, len(label))
+            # base radius y factor por carácter
+            radius = max(0.18, 0.07 * text_len)
+            # si el nodo está en la ruta, color verde, si no, color navy
+            face = "#2ecc71" if node in route_nodes else "#0b2545"
+            edgec = "#1e7a3a" if node in route_nodes else "#8B0000"
+            circ = Circle((x, y), radius, facecolor=face, edgecolor=edgec, linewidth=1.2, zorder=2)
+            self.ax.add_patch(circ)
+            # Ajustar tamaño de fuente ligeramente según longitud
+            fsize = 9 if text_len <= 12 else max(6, int(11 - (text_len - 12) * 0.3))
+            self.ax.text(x, y, label, color="#ffffff", ha='center', va='center', fontsize=fsize, zorder=3)
 
         self.ax.set_facecolor('#ffffff')
         self.fig.patch.set_facecolor('#ffffff')
@@ -408,7 +452,8 @@ class EvacuacionApp(QWidget):
         self.resultado.setReadOnly(True)
         self.resultado.setStyleSheet("background: #ffffff; color: #000000; font-size: 12pt; border: 2px solid #0b2545; border-radius: 8px;")
         self.resultado.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.resultado.setFixedHeight(70)
+        # start with a reasonable small height; will auto-resize when setting text
+        self.resultado.setFixedHeight(90)
 
         main_layout.addLayout(top_panel, stretch=5)
         main_layout.addWidget(self.resultado, stretch=0)
@@ -428,8 +473,8 @@ class EvacuacionApp(QWidget):
         origen, destino = datos.split(',')
         self.grafo.agregar_arista(origen.strip(), destino.strip())
         
-        # actualizar visualmente (opcional mostrar en resultado)
-        self.resultado.setText(f"Agregado: {origen.strip()} -> {destino.strip()}")
+        # actualizar visualmente (no mostrar mensajes de conexión en el área de resultados)
+        # (conexiones se añaden al grafo y se visualizan en el canvas)
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
         
@@ -454,9 +499,7 @@ class EvacuacionApp(QWidget):
                 for linea in f:
                     origen, destino = linea.strip().split(',')
                     self.grafo.agregar_arista(origen, destino)
-                    
-                    # no registrar en el área del árbol; mostrar en resultado
-                    self.resultado.setText(f"Conectado: {origen} -> {destino}")
+                    # no registrar en el área del árbol ni en el área de resultados
             self.grafo_canvas.set_grafo(self.grafo)
 
     def guardar_csv(self):
@@ -481,27 +524,35 @@ class EvacuacionApp(QWidget):
         fin = self.pedir_edificio("Fin", "Edificio de destino:")
         if inicio and fin:
             resultado_dfs = dfs(self.grafo, inicio, fin)
-            texto = f"Padres: {resultado_dfs['padres']}\n"
-            texto += f"Árbol DFS: {resultado_dfs['arbol_dfs']}\n"
-            ruta = resultado_dfs['ruta_encontrada']
+            ruta = resultado_dfs.get('ruta_encontrada')
+            # preparar texto: Distancia, Ruta encontrada, Tiempo, Padres, Camino más profundo
             if ruta:
-                texto += f"Ruta encontrada: {' -> '.join(ruta)}\n"
-                texto += f"Distancia: {len(ruta) - 1}\n"
+                distancia = len(ruta) - 1
+                ruta_text = ' -> '.join(ruta)
             else:
-                texto += "Ruta encontrada: No encontrada\n"
-            texto += f"Camino más profundo: {' -> '.join(resultado_dfs['camino_mas_profundo'])}\n"
-            texto += f"Tiempo: {resultado_dfs['tiempo']:.6f} segundos"
-            self.resultado.setText(texto)
+                distancia = 'No encontrada'
+                ruta_text = 'No encontrada'
+            camino_profundo = resultado_dfs.get('camino_mas_profundo') or []
+            camino_profundo_text = ' -> '.join(camino_profundo) if camino_profundo else 'N/A'
+            texto = f"Distancia: {distancia}\n"
+            texto += f"Ruta encontrada: {ruta_text}\n"
+            texto += f"Tiempo: {resultado_dfs['tiempo']:.6f} segundos\n"
+            texto += f"Padres: {resultado_dfs.get('padres', {})}\n"
+            texto += f"Camino más profundo: {camino_profundo_text}\n"
+            # mostrar mensaje popup si no hay ruta encontrada
+            if not ruta:
+                QMessageBox.information(self, "Resultado", "La ruta no existe")
+            set_result_widget_text(self.resultado, texto, min_lines=4, max_lines=8)
+            # actualizar grafo principal
             if ruta:
                 self.grafo_canvas.set_grafo(self.grafo, ruta)
             else:
                 self.grafo_canvas.set_grafo(self.grafo)
             self.grafo_canvas.update()
             self.grafo_canvas.repaint()
-            # Mostrar árbol DFS en vista visual (QTreeWidget)
             padres = resultado_dfs.get('arbol_dfs') or resultado_dfs.get('padres') or {}
             try:
-                self.tree.set_tree(padres)
+                self.tree.set_tree(padres, ruta)
             except Exception:
                 pass
 
@@ -632,9 +683,9 @@ class EvacuacionAppBFS(QWidget):
         
         self.resultado = QTextEdit()
         self.resultado.setReadOnly(True)
-        self.resultado.setStyleSheet("background: #000000; color: #ffffff; font-size: 12pt; border: 2px solid #4b0000; border-radius: 8px;")
+        self.resultado.setStyleSheet("background: #ffffff; color: #000000; font-size: 12pt; border: 2px solid #4b0000; border-radius: 8px;")
         self.resultado.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.resultado.setFixedHeight(70)
+        self.resultado.setFixedHeight(90)
 
         main_layout.addLayout(top_panel, stretch=5)
         main_layout.addWidget(self.resultado, stretch=0)
@@ -646,7 +697,6 @@ class EvacuacionAppBFS(QWidget):
             return
         origen, destino = datos.split(',')
         self.grafo.agregar_arista(origen.strip(), destino.strip())
-        self.resultado.setText(f"Agregado: {origen.strip()} -> {destino.strip()}")
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
         
@@ -665,7 +715,6 @@ class EvacuacionAppBFS(QWidget):
                 for linea in f:
                     origen, destino = linea.strip().split(',')
                     self.grafo.agregar_arista(origen, destino)
-                    self.resultado.setText(f"Conectado: {origen} -> {destino}")
             self.grafo_canvas.set_grafo(self.grafo)
 
     def guardar_csv(self):
@@ -687,16 +736,22 @@ class EvacuacionAppBFS(QWidget):
         fin = self.pedir_edificio("Fin", "Edificio de destino:")
         if inicio and fin:
             resultado_bfs = bfs(self.grafo, inicio, fin)
-            if fin in resultado_bfs['distancias']:
-                texto = f"Distancia al destino: {resultado_bfs['distancias'][fin]}\n"
+            ruta = resultado_bfs.get('ruta_mas_corta')
+            if ruta:
+                distancia = resultado_bfs['distancias'].get(fin, 'No encontrada')
+                ruta_text = ' -> '.join(ruta)
             else:
-                texto = "Distancia al destino: No encontrada\n"
-            texto += f"Padres: {resultado_bfs['padres']}\n"
-            texto += f"Ruta más corta: {' -> '.join(resultado_bfs['ruta_mas_corta']) if resultado_bfs['ruta_mas_corta'] else 'No encontrada'}\n"
-            texto += f"Árbol BFS: {resultado_bfs['arbol_bfs']}\n"
-            texto += f"Tiempo: {resultado_bfs['tiempo']:.6f} segundos"
-            self.resultado.setText(texto)
-            ruta = resultado_bfs['ruta_mas_corta']
+                distancia = 'No encontrada'
+                ruta_text = 'No encontrada'
+            texto = f"Distancia: {distancia}\n"
+            texto += f"Ruta encontrada: {ruta_text}\n"
+            texto += f"Tiempo: {resultado_bfs['tiempo']:.6f} segundos\n"
+            texto += f"Padres: {resultado_bfs.get('padres', {})}\n"
+            set_result_widget_text(self.resultado, texto, min_lines=3, max_lines=6)
+            ruta = resultado_bfs.get('ruta_mas_corta')
+            # popup si no existe la ruta
+            if not ruta:
+                QMessageBox.information(self, "Resultado", "La ruta no existe")
             if ruta:
                 self.grafo_canvas.set_grafo(self.grafo, ruta)
             else:
@@ -706,7 +761,7 @@ class EvacuacionAppBFS(QWidget):
             # Mostrar árbol BFS en vista visual (QTreeWidget)
             padres = resultado_bfs.get('arbol_bfs') or resultado_bfs.get('padres') or {}
             try:
-                self.tree.set_tree(padres)
+                self.tree.set_tree(padres, ruta)
             except Exception:
                 pass
             
