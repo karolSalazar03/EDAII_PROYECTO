@@ -16,6 +16,94 @@ from grafo import Grafo
 from dfs import dfs
 from bfs import bfs
 
+
+class TreeCanvas(FigureCanvas):
+    """Canvas simple para dibujar un árbol (node-link) usando matplotlib.
+
+    Método público: `set_tree(padres_map)` acepta los mismos formatos que antes
+    (child->parent o parent->children) y dibuja un layout jerárquico.
+    """
+    def __init__(self):
+        self.fig, self.ax = plt.subplots(figsize=(4, 4), dpi=100)
+        super().__init__(self.fig)
+        try:
+            self.setMinimumSize(360, 300)
+        except Exception:
+            pass
+        self.ax.axis('off')
+
+    def set_tree(self, padres_map):
+        self.ax.clear()
+        if not padres_map:
+            self.draw()
+            return
+
+        # Normalizar a parent->children
+        is_child_parent = all(not isinstance(v, (list, tuple)) for v in padres_map.values())
+        children = {}
+        roots = []
+
+        if is_child_parent:
+            for child, parent in padres_map.items():
+                if parent is None:
+                    roots.append(child)
+                else:
+                    children.setdefault(parent, []).append(child)
+            # añadir nodos sueltos
+            for k in padres_map.keys():
+                children.setdefault(k, [])
+        else:
+            for parent, childs in padres_map.items():
+                children.setdefault(parent, []).extend(list(childs))
+        # detectar raíces: nodos que no son hijos
+        all_children = {c for childs in children.values() for c in childs}
+        potential_roots = [n for n in children.keys() if n not in all_children]
+        if potential_roots:
+            roots = potential_roots
+        else:
+            roots = list(children.keys())
+
+        # asignar posiciones (x,y) por recorrido recursivo
+        xpos = {}
+        ypos = {}
+        counter = [0]
+
+        def assign(node, depth=0):
+            if not children.get(node):
+                xpos[node] = counter[0]
+                counter[0] += 1
+            else:
+                for c in sorted(children.get(node, [])):
+                    assign(c, depth + 1)
+                xs = [xpos[c] for c in children.get(node, [])]
+                xpos[node] = sum(xs) / len(xs) if xs else counter[0]
+            ypos[node] = -depth
+
+        for r in roots:
+            assign(r, 0)
+
+        # escalar x para mejor presentación
+        xs = {n: xpos[n] * 1.6 for n in xpos}
+        ys = ypos
+
+        # dibujar aristas
+        for parent, childs in children.items():
+            for c in childs:
+                x1, y1 = xs.get(parent, 0), ys.get(parent, 0)
+                x2, y2 = xs.get(c, 0), ys.get(c, 0)
+                self.ax.plot([x1, x2], [y1, y2], color="#8B0000", linewidth=1.6, zorder=1)
+
+        # dibujar nodos
+        for node in xpos.keys():
+            x, y = xs[node], ys[node]
+            self.ax.scatter([x], [y], s=260, color="#0b2545", edgecolors="#8B0000", linewidths=1.2, zorder=2)
+            self.ax.text(x, y, str(node), color="#ffffff", ha='center', va='center', fontsize=9, zorder=3)
+
+        self.ax.set_facecolor('#ffffff')
+        self.fig.patch.set_facecolor('#ffffff')
+        self.ax.axis('off')
+        self.draw()
+
 class MainMenu(QWidget):
     """
     Clase que representa el menú principal de la aplicación.
@@ -110,13 +198,6 @@ class GrafoCanvas(FigureCanvas):
         self.set_grafo(grafo)
 
     def set_grafo(self, grafo, ruta=None):
-        """
-        Dibuja el grafo en el canvas.
-
-        Args:
-            grafo (Grafo): El grafo a dibujar.
-            ruta (list, optional): Lista de nodos que forman la ruta a destacar.
-        """
         self.ax.clear()
         nodes = list(grafo.nodos.keys())
         edges = []
@@ -301,13 +382,9 @@ class EvacuacionApp(QWidget):
         
 
         
-        self.texto = QTextEdit()
-        self.texto.setObjectName("CargadosTextEdit")
-        self.texto.setReadOnly(True)
-        self.texto.setFixedHeight(250)
-        self.texto.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.texto.setLineWrapMode(QTextEdit.WidgetWidth)
-        left_panel.addWidget(self.texto)
+        self.tree = TreeCanvas()
+        # Small fixed height to keep layout compact; TreeCanvas handles its own drawing
+        left_panel.addWidget(self.tree)
 
         
         dfs_line = QFrame()
@@ -351,7 +428,8 @@ class EvacuacionApp(QWidget):
         origen, destino = datos.split(',')
         self.grafo.agregar_arista(origen.strip(), destino.strip())
         
-        self.texto.append(f"Agregado: {origen.strip()} -> {destino.strip()}")
+        # actualizar visualmente (opcional mostrar en resultado)
+        self.resultado.setText(f"Agregado: {origen.strip()} -> {destino.strip()}")
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
         
@@ -377,7 +455,8 @@ class EvacuacionApp(QWidget):
                     origen, destino = linea.strip().split(',')
                     self.grafo.agregar_arista(origen, destino)
                     
-                    self.texto.append(f"Conectado: {origen} -> {destino}")
+                    # no registrar en el área del árbol; mostrar en resultado
+                    self.resultado.setText(f"Conectado: {origen} -> {destino}")
             self.grafo_canvas.set_grafo(self.grafo)
 
     def guardar_csv(self):
@@ -394,6 +473,8 @@ class EvacuacionApp(QWidget):
     def pedir_edificio(self, titulo, mensaje):
         texto, ok = QInputDialog.getText(self, titulo, mensaje)
         return texto.strip() if ok and texto else None
+
+    pass
 
     def buscar_ruta(self):
         inicio = self.pedir_edificio("Inicio", "Edificio de inicio:")
@@ -417,7 +498,12 @@ class EvacuacionApp(QWidget):
                 self.grafo_canvas.set_grafo(self.grafo)
             self.grafo_canvas.update()
             self.grafo_canvas.repaint()
-            
+            # Mostrar árbol DFS en vista visual (QTreeWidget)
+            padres = resultado_dfs.get('arbol_dfs') or resultado_dfs.get('padres') or {}
+            try:
+                self.tree.set_tree(padres)
+            except Exception:
+                pass
 
     
 
@@ -523,13 +609,8 @@ class EvacuacionAppBFS(QWidget):
 
         
         
-        self.texto = QTextEdit()
-        self.texto.setObjectName("CargadosTextEdit")
-        self.texto.setReadOnly(True)
-        self.texto.setFixedHeight(250)
-        self.texto.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.texto.setLineWrapMode(QTextEdit.WidgetWidth)
-        left_panel.addWidget(self.texto)
+        self.tree = TreeCanvas()
+        left_panel.addWidget(self.tree)
 
         
         dfs_line = QFrame()
@@ -565,7 +646,7 @@ class EvacuacionAppBFS(QWidget):
             return
         origen, destino = datos.split(',')
         self.grafo.agregar_arista(origen.strip(), destino.strip())
-        self.texto.append(f"Agregado: {origen.strip()} -> {destino.strip()}")
+        self.resultado.setText(f"Agregado: {origen.strip()} -> {destino.strip()}")
         self.entry.clear()
         self.grafo_canvas.set_grafo(self.grafo)
         
@@ -584,7 +665,7 @@ class EvacuacionAppBFS(QWidget):
                 for linea in f:
                     origen, destino = linea.strip().split(',')
                     self.grafo.agregar_arista(origen, destino)
-                    self.texto.append(f"Conectado: {origen} -> {destino}")
+                    self.resultado.setText(f"Conectado: {origen} -> {destino}")
             self.grafo_canvas.set_grafo(self.grafo)
 
     def guardar_csv(self):
@@ -622,7 +703,12 @@ class EvacuacionAppBFS(QWidget):
                 self.grafo_canvas.set_grafo(self.grafo)
             self.grafo_canvas.update()
             self.grafo_canvas.repaint()
-
+            # Mostrar árbol BFS en vista visual (QTreeWidget)
+            padres = resultado_bfs.get('arbol_bfs') or resultado_bfs.get('padres') or {}
+            try:
+                self.tree.set_tree(padres)
+            except Exception:
+                pass
             
 
     def volver_menu(self):
@@ -632,8 +718,7 @@ class EvacuacionAppBFS(QWidget):
 
     
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    menu = MainMenu()
-    menu.show()
-    sys.exit(app.exec_())
+
+
+    
+
